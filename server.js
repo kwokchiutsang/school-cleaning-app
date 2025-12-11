@@ -4,9 +4,12 @@ const path = require('path');
 const { Pool } = require('pg');
 
 const app = express();
-// 讀取環境變數 PORT，若無則預設 3000
-const PORT = process.env.PORT || 3000;
-// 讀取環境變數 DATABASE_URL
+
+// 🟢 設定 Port 與 Host (部署關鍵設定)
+const PORT = process.env.PORT || 3000; // 優先使用系統分配的 Port (Railway 會自動注入)
+const HOST = '0.0.0.0';                // 監聽所有網路介面，讓雲端負載平衡器可以連線
+
+// 讀取環境變數 DATABASE_URL (Railway PostgreSQL)
 const DATABASE_URL = process.env.DATABASE_URL;
 
 // Middleware
@@ -73,7 +76,8 @@ if (DATABASE_URL) {
     
     const pool = new Pool({
         connectionString: DATABASE_URL,
-        ssl: { rejectUnauthorized: false } // Railway 通常需要 SSL
+        // Railway 的 PostgreSQL 需要 SSL 連線，rejectUnauthorized: false 允許自簽憑證
+        ssl: { rejectUnauthorized: false } 
     });
 
     // 初始化資料庫表格
@@ -161,6 +165,8 @@ app.post('/api/data', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`伺服器正在運行，Port: ${PORT}`);
+// 🟢 監聽設定：使用 HOST 與 PORT 啟動伺服器
+app.listen(PORT, HOST, () => {
+    console.log(`伺服器正在運行: http://${HOST}:${PORT}`);
+    console.log(`外部連線 Port: ${PORT}`);
 });
