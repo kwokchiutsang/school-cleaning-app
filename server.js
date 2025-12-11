@@ -8,18 +8,18 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
 
-// 讀取環境變數 DATABASE_URL (必須設定)
-const DATABASE_URL = process.env.DATABASE_URL;
-
-if (!DATABASE_URL) {
-    console.error("錯誤：未設定 DATABASE_URL 環境變數！無法啟動資料庫模式。");
-    // 在生產環境中通常會這裡 process.exit(1)，但在開發測試時我們讓它報錯提示
+// 檢查環境變數 (僅作提示用，不阻擋程式執行，以免影響 Log 查看)
+if (!process.env.DATABASE_URL) {
+    console.error("⚠️ 警告：未偵測到 DATABASE_URL！資料庫連線將會失敗。");
 }
 
-// 建立 PostgreSQL 連線池
+// 🟢 建立 PostgreSQL 連線池 (修正版)
+// 直接使用 process.env.DATABASE_URL，不進行任何手動解析
 const pool = new Pool({
-    connectionString: DATABASE_URL,
-    ssl: { rejectUnauthorized: false } // Railway 必備設定
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false // Railway 必須要加這一行才能連線 SSL
+    }
 });
 
 // Middleware
@@ -79,9 +79,11 @@ const defaultData = {
 
 // --- 資料庫初始化邏輯 ---
 const initDB = async () => {
+    // 如果連線字串為空，直接跳出，避免後續報錯
+    if (!process.env.DATABASE_URL) return;
+
     try {
         // 1. 建立表格 (如果不存在)
-        // 使用 JSONB 格式儲存整個 app 資料，簡單且彈性
         await pool.query(`
             CREATE TABLE IF NOT EXISTS app_data (
                 id SERIAL PRIMARY KEY,
@@ -101,24 +103,27 @@ const initDB = async () => {
         }
     } catch (err) {
         console.error('❌ 資料庫初始化失敗:', err);
+        // 不退出 process，讓 Server 保持運行，方便查看 Log
     }
 };
 
 // 啟動時執行初始化
-if (DATABASE_URL) {
-    initDB();
-}
+initDB();
 
 // --- API Routes ---
 
 // 取得資料
 app.get('/api/data', async (req, res) => {
+    if (!process.env.DATABASE_URL) {
+        // 如果沒有資料庫，暫時回傳預設資料 (Fallback)
+        return res.json(defaultData);
+    }
+
     try {
         const result = await pool.query('SELECT data FROM app_data WHERE id = 1');
         if (result.rows.length > 0) {
             res.json(result.rows[0].data);
         } else {
-            // 理論上 initDB 會處理，但做個保險
             res.json(defaultData);
         }
     } catch (err) {
@@ -129,6 +134,10 @@ app.get('/api/data', async (req, res) => {
 
 // 儲存資料
 app.post('/api/data', async (req, res) => {
+    if (!process.env.DATABASE_URL) {
+        return res.status(500).json({ error: '未設定資料庫，無法儲存' });
+    }
+
     try {
         const newData = req.body;
         // 更新 id=1 的該筆資料
