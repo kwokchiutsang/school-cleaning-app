@@ -1,22 +1,32 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 
 const app = express();
 
 // 🟢 設定 Port 與 Host (部署關鍵設定)
-const PORT = process.env.PORT || 3000; // 優先使用系統分配的 Port (Railway 會自動注入)
-const HOST = '0.0.0.0';                // 監聽所有網路介面，讓雲端負載平衡器可以連線
+const PORT = process.env.PORT || 3000;
+const HOST = '0.0.0.0';
 
-// 讀取環境變數 DATABASE_URL (Railway PostgreSQL)
+// 讀取環境變數 DATABASE_URL (必須設定)
 const DATABASE_URL = process.env.DATABASE_URL;
+
+if (!DATABASE_URL) {
+    console.error("錯誤：未設定 DATABASE_URL 環境變數！無法啟動資料庫模式。");
+    // 在生產環境中通常會這裡 process.exit(1)，但在開發測試時我們讓它報錯提示
+}
+
+// 建立 PostgreSQL 連線池
+const pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: { rejectUnauthorized: false } // Railway 必備設定
+});
 
 // Middleware
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// 預設資料結構
+// 預設資料結構 (當資料庫為空時使用)
 const defaultData = {
     projectInfo: { startDate: '2025-12-22', supervisor: '', company: '腓利清潔服務有限公司' },
     schedule: [
@@ -67,106 +77,70 @@ const defaultData = {
     ]
 };
 
-// --- 資料存取層 (Data Access Layer) ---
-let dbHandlers = {};
-
-if (DATABASE_URL) {
-    // 模式 A: 使用 PostgreSQL 資料庫 (Railway)
-    console.log('偵測到 DATABASE_URL，使用 PostgreSQL 模式');
-    
-    const pool = new Pool({
-        connectionString: DATABASE_URL,
-        // Railway 的 PostgreSQL 需要 SSL 連線，rejectUnauthorized: false 允許自簽憑證
-        ssl: { rejectUnauthorized: false } 
-    });
-
-    // 初始化資料庫表格
-    const initDB = async () => {
-        try {
-            await pool.query(`
-                CREATE TABLE IF NOT EXISTS app_data (
-                    id SERIAL PRIMARY KEY,
-                    data JSONB NOT NULL
-                );
-            `);
-            // 確保至少有一行資料 (ID=1)
-            const res = await pool.query('SELECT * FROM app_data WHERE id = 1');
-            if (res.rows.length === 0) {
-                await pool.query('INSERT INTO app_data (id, data) VALUES (1, $1)', [JSON.stringify(defaultData)]);
-                console.log('資料庫初始化完成：已插入預設資料');
-            } else {
-                console.log('資料庫連線成功：表格已存在');
-            }
-        } catch (err) {
-            console.error('資料庫初始化失敗:', err);
+// --- 資料庫初始化邏輯 ---
+const initDB = async () => {
+    try {
+        // 1. 建立表格 (如果不存在)
+        // 使用 JSONB 格式儲存整個 app 資料，簡單且彈性
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS app_data (
+                id SERIAL PRIMARY KEY,
+                data JSONB NOT NULL
+            );
+        `);
+        
+        // 2. 檢查是否已有資料
+        const res = await pool.query('SELECT * FROM app_data WHERE id = 1');
+        
+        // 3. 如果沒有資料，插入預設資料
+        if (res.rows.length === 0) {
+            await pool.query('INSERT INTO app_data (id, data) VALUES (1, $1)', [JSON.stringify(defaultData)]);
+            console.log('✅ 資料庫初始化完成：已建立表格並插入預設資料');
+        } else {
+            console.log('✅ 資料庫連線成功：表格與資料已存在');
         }
-    };
-    initDB();
-
-    dbHandlers.getData = async () => {
-        const res = await pool.query('SELECT data FROM app_data WHERE id = 1');
-        return res.rows[0] ? res.rows[0].data : defaultData;
-    };
-
-    dbHandlers.saveData = async (newData) => {
-        await pool.query('UPDATE app_data SET data = $1 WHERE id = 1', [JSON.stringify(newData)]);
-    };
-
-} else {
-    // 模式 B: 使用本地檔案系統 (Local/Fallback)
-    console.log('未偵測到 DATABASE_URL，使用本地檔案模式 (data.json)');
-    
-    const DATA_FILE = path.join(__dirname, 'data.json');
-
-    // 確保資料檔案存在
-    if (!fs.existsSync(DATA_FILE)) {
-        fs.writeFileSync(DATA_FILE, JSON.stringify(defaultData, null, 2), 'utf8');
+    } catch (err) {
+        console.error('❌ 資料庫初始化失敗:', err);
     }
+};
 
-    dbHandlers.getData = async () => {
-        return new Promise((resolve, reject) => {
-            fs.readFile(DATA_FILE, 'utf8', (err, data) => {
-                if (err) reject(err);
-                else resolve(JSON.parse(data));
-            });
-        });
-    };
-
-    dbHandlers.saveData = async (newData) => {
-        return new Promise((resolve, reject) => {
-            fs.writeFile(DATA_FILE, JSON.stringify(newData, null, 2), 'utf8', (err) => {
-                if (err) reject(err);
-                else resolve();
-            });
-        });
-    };
+// 啟動時執行初始化
+if (DATABASE_URL) {
+    initDB();
 }
 
 // --- API Routes ---
 
+// 取得資料
 app.get('/api/data', async (req, res) => {
     try {
-        const data = await dbHandlers.getData();
-        res.json(data);
+        const result = await pool.query('SELECT data FROM app_data WHERE id = 1');
+        if (result.rows.length > 0) {
+            res.json(result.rows[0].data);
+        } else {
+            // 理論上 initDB 會處理，但做個保險
+            res.json(defaultData);
+        }
     } catch (err) {
-        console.error('讀取錯誤:', err);
-        res.status(500).json({ error: '無法讀取資料' });
+        console.error('資料庫讀取錯誤:', err);
+        res.status(500).json({ error: '無法從資料庫讀取資料' });
     }
 });
 
+// 儲存資料
 app.post('/api/data', async (req, res) => {
     try {
         const newData = req.body;
-        await dbHandlers.saveData(newData);
-        res.json({ success: true, message: '資料已儲存' });
+        // 更新 id=1 的該筆資料
+        await pool.query('UPDATE app_data SET data = $1 WHERE id = 1', [JSON.stringify(newData)]);
+        res.json({ success: true, message: '資料已儲存至資料庫' });
     } catch (err) {
-        console.error('儲存錯誤:', err);
-        res.status(500).json({ error: '無法儲存資料' });
+        console.error('資料庫儲存錯誤:', err);
+        res.status(500).json({ error: '無法儲存資料至資料庫' });
     }
 });
 
-// 🟢 監聽設定：使用 HOST 與 PORT 啟動伺服器
+// 🟢 啟動伺服器
 app.listen(PORT, HOST, () => {
     console.log(`伺服器正在運行: http://${HOST}:${PORT}`);
-    console.log(`外部連線 Port: ${PORT}`);
 });
