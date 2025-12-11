@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>仁濟醫院林百欣中學 - 聖誕節長假期清潔工作日誌 (Node.js版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+        }
+
+        .custom-checkbox input:checked + div {
+            background-color: #2563eb;
+            border-color: #2563eb;
+        }
+        .custom-checkbox input:checked + div svg {
+            display: block;
+        }
+        
+        @media print {
+            body { background-color: white; font-size: 12pt; }
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            .shadow-sm, .shadow-md, .shadow-lg { box-shadow: none !important; }
+            .bg-white { border: 1px solid #e5e7eb; }
+            input, textarea {
+                border: none !important;
+                border-bottom: 1px solid #ccc !important;
+                padding: 0 !important;
+                background: transparent !important;
+                resize: none;
+            }
+        }
+        .print-only { display: none; }
+    </style>
+</head>
+<body>
+    <div id="app" class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-blue-800 text-white p-6 shadow-lg print:bg-white print:text-black print:p-0 print:border-b-2 print:border-black print:mb-4">
+            <div class="max-w-5xl mx-auto">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h1 class="text-2xl font-bold mb-2">仁濟醫院林百欣中學<br class="hidden print:block"><span class="text-xl font-normal opacity-90">聖誕節長假期清潔工作日誌</span></h1>
+                        <p class="text-blue-200 text-sm no-print">Node.js 伺服器版 ({{ appMode }}) - 自動儲存</p>
+                    </div>
+                    <div class="text-right hidden md:block print:block">
+                        <p class="font-bold">腓利清潔服務有限公司</p>
+                        <p class="text-xs opacity-75">合約編號: 2025-2026/CLEANING</p>
+                        <div class="mt-2 text-xs font-medium no-print transition-colors duration-300" :class="statusColor">
+                            <i class="fa-solid" :class="statusIcon"></i>
+                            {{ saveStatus }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Info Inputs -->
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 print:grid-cols-3 print:gap-8 print:mt-4">
+                    <div class="bg-blue-900/50 p-3 rounded-lg border border-blue-700/50 print:bg-transparent print:border-none print:p-0">
+                        <label class="block text-xs uppercase tracking-wide text-blue-300 mb-1 print:text-gray-500">開始日期</label>
+                        <input type="date" v-model="projectInfo.startDate" class="w-full bg-transparent border-b border-blue-400 focus:outline-none text-white font-medium print:text-black print:border-gray-300">
+                    </div>
+                    <div class="bg-blue-900/50 p-3 rounded-lg border border-blue-700/50 print:bg-transparent print:border-none print:p-0">
+                        <label class="block text-xs uppercase tracking-wide text-blue-300 mb-1 print:text-gray-500">現場主管</label>
+                        <input type="text" v-model="projectInfo.supervisor" placeholder="輸入主管姓名" class="w-full bg-transparent border-b border-blue-400 focus:outline-none text-white font-medium placeholder-blue-400 print:text-black print:border-gray-300 print:placeholder-transparent">
+                    </div>
+                    <div class="bg-blue-900/50 p-3 rounded-lg border border-blue-700/50 flex items-center justify-between no-print">
+                        <div>
+                            <label class="block text-xs uppercase tracking-wide text-blue-300 mb-1">總體進度</label>
+                            <div class="text-xl font-bold">{{ calculateTotalProgress }}%</div>
+                        </div>
+                        <div class="h-10 w-10 rounded-full border-4 border-blue-300 flex items-center justify-center relative">
+                            <i class="fa-solid fa-check text-blue-300" :style="{ opacity: calculateTotalProgress / 100 }"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-grow max-w-5xl mx-auto w-full p-4 print:p-0">
+            <!-- Controls -->
+            <div class="mb-6 flex flex-wrap justify-between items-center gap-4 no-print">
+                <div class="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
+                    <button v-for="day in 5" :key="day" @click="activeTab = day"
+                        :class="['px-5 py-2.5 rounded-full text-sm font-medium transition-all shadow-sm whitespace-nowrap', 
+                        activeTab === day ? 'bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200']">
+                        第 {{ day }} 天
+                    </button>
+                    <button @click="activeTab = 6" 
+                        :class="['px-5 py-2.5 rounded-full text-sm font-medium transition-all shadow-sm whitespace-nowrap flex items-center gap-2', 
+                        activeTab === 6 ? 'bg-green-600 text-white ring-2 ring-green-300 ring-offset-1' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200']">
+                        <i class="fa-solid fa-list-check"></i> 總覽
+                    </button>
+                </div>
+                <div class="flex gap-2">
+                    <button @click="resetData" class="bg-white border border-red-200 text-red-600 px-4 py-2.5 rounded-lg hover:bg-red-50 transition-colors shadow-sm flex items-center gap-2 font-medium text-sm">
+                        <i class="fa-solid fa-rotate-left"></i> 重置
+                    </button>
+                    <button @click="printPage" class="bg-gray-800 text-white px-5 py-2.5 rounded-lg hover:bg-gray-700 transition-colors shadow-sm flex items-center gap-2 font-medium">
+                        <i class="fa-solid fa-print"></i> 列印 / 存檔
+                    </button>
+                </div>
+            </div>
+
+            <!-- Schedule View -->
+            <div class="space-y-6">
+                <div v-for="(day, index) in schedule" :key="day.day" v-show="activeTab === day.day || activeTab === 6"
+                     class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6 break-inside-avoid print:shadow-none print:rounded-none print:border-b-2 print:border-gray-800 print:mb-8">
+                    
+                    <div class="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center print:bg-gray-100 print:border-b-black">
+                        <div>
+                            <h2 class="text-xl font-bold text-gray-800 flex items-center gap-3">
+                                <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded border border-blue-200 print:border-black print:bg-transparent print:text-black">DAY {{ day.day }}</span>
+                                {{ day.title }}
+                            </h2>
+                            <p class="text-sm text-gray-500 mt-1 flex items-center gap-1.5 print:text-black">
+                                <i class="fa-solid fa-bullseye text-orange-500 print:text-black"></i>
+                                重點：{{ day.focus }}
+                            </p>
+                        </div>
+                        <div class="no-print">
+                            <span class="text-sm font-medium text-gray-400">進度: {{ calculateDayProgress(index) }}%</span>
+                        </div>
+                    </div>
+
+                    <!-- Tasks -->
+                    <div>
+                        <!-- Morning -->
+                        <div class="p-5 border-b border-gray-100 print:p-2 print:border-gray-300">
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2 print:text-black">
+                                <span class="w-2 h-2 bg-yellow-400 rounded-full print:bg-black"></span>
+                                {{ day.morning.title }}
+                            </h3>
+                            <div class="space-y-2">
+                                <label v-for="task in day.morning.tasks" :key="task.id" class="flex items-start p-2 hover:bg-gray-50 rounded-lg cursor-pointer group transition-colors print:p-0 print:hover:bg-transparent">
+                                    <div class="custom-checkbox relative flex items-center mt-0.5 no-print">
+                                        <input type="checkbox" v-model="task.completed" class="opacity-0 absolute h-0 w-0">
+                                        <div class="w-5 h-5 bg-white border-2 border-gray-300 rounded flex items-center justify-center transition-all group-hover:border-blue-400">
+                                            <svg class="w-3 h-3 text-white hidden pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                                        </div>
+                                    </div>
+                                    <div class="print-only w-4 h-4 border border-black mr-2 mt-0.5 inline-block">
+                                        <span v-if="task.completed" class="flex justify-center items-center h-full text-xs">✓</span>
+                                    </div>
+                                    <div class="ml-3 text-sm flex-1 print:ml-0">
+                                        <span :class="{'text-gray-400 line-through': task.completed && !isPrinting, 'text-gray-700': !task.completed || isPrinting, 'font-bold text-blue-900 print:text-black': task.isHighLevel}">{{ task.text }}</span>
+                                        <span v-if="task.isHighLevel" class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 print:border print:border-black print:bg-transparent print:text-black">高空工作</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Afternoon -->
+                        <div class="p-5 border-b border-gray-100 print:p-2 print:border-gray-300">
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2 print:text-black">
+                                <span class="w-2 h-2 bg-orange-400 rounded-full print:bg-black"></span>
+                                {{ day.afternoon.title }}
+                            </h3>
+                            <div class="space-y-2">
+                                <label v-for="task in day.afternoon.tasks" :key="task.id" class="flex items-start p-2 hover:bg-gray-50 rounded-lg cursor-pointer group transition-colors print:p-0 print:hover:bg-transparent">
+                                    <div class="custom-checkbox relative flex items-center mt-0.5 no-print">
+                                        <input type="checkbox" v-model="task.completed" class="opacity-0 absolute h-0 w-0">
+                                        <div class="w-5 h-5 bg-white border-2 border-gray-300 rounded flex items-center justify-center transition-all group-hover:border-blue-400">
+                                            <svg class="w-3 h-3 text-white hidden pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                                        </div>
+                                    </div>
+                                    <div class="print-only w-4 h-4 border border-black mr-2 mt-0.5 inline-block">
+                                        <span v-if="task.completed" class="flex justify-center items-center h-full text-xs">✓</span>
+                                    </div>
+                                    <div class="ml-3 text-sm flex-1 print:ml-0">
+                                        <span :class="{'text-gray-400 line-through': task.completed && !isPrinting, 'text-gray-700': !task.completed || isPrinting}">{{ task.text }}</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Staff Info -->
+                        <div class="p-5 bg-gray-50 grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:bg-transparent print:p-2 print:gap-4 print:border-t print:border-gray-300">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 mb-1.5 print:text-black">A 組人員 (負責區域)</label>
+                                <input type="text" v-model="day.staffGroupA" placeholder="例如：陳大文, 李小明" class="w-full text-sm p-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none print:border-none print:border-b print:border-black print:rounded-none print:p-1 print:bg-transparent">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 mb-1.5 print:text-black">B 組人員 (負責區域)</label>
+                                <input type="text" v-model="day.staffGroupB" placeholder="例如：張志強, 王美玲, 林伯" class="w-full text-sm p-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none print:border-none print:border-b print:border-black print:rounded-none print:p-1 print:bg-transparent">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs font-bold text-gray-500 mb-1.5 print:text-black">當日備註 / 異常記錄</label>
+                                <textarea v-model="day.notes" rows="2" placeholder="記錄未完成事項、損壞發現或特殊情況..." class="w-full text-sm p-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none print:border-none print:border-b print:border-black print:rounded-none print:p-1 print:bg-transparent print:h-12"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Print Signature -->
+                <div class="print-only mt-8 pt-8 border-t-2 border-black break-inside-avoid" v-if="activeTab === 6">
+                    <div class="flex justify-between gap-10">
+                        <div class="w-1/2">
+                            <p class="text-sm font-bold mb-10">承辦商主管簽署：</p>
+                            <div class="border-b border-black h-1"></div>
+                            <p class="text-xs mt-2">日期：</p>
+                        </div>
+                        <div class="w-1/2">
+                            <p class="text-sm font-bold mb-10">校方代表確認：</p>
+                            <div class="border-b border-black h-1"></div>
+                            <p class="text-xs mt-2">日期：</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                const activeTab = ref(1);
+                const isPrinting = ref(false);
+                const saveStatus = ref('連接中...');
+                const statusColor = ref('text-gray-500');
+                const statusIcon = ref('fa-circle-notch fa-spin');
+                const appMode = ref('載入中');
+                
+                // 使用相對路徑，讓部署後的網域能自動對應
+                const API_URL = '/api/data';
+
+                // 預設資料
+                const defaultData = {
+                    projectInfo: { startDate: '2025-12-22', supervisor: '', company: '腓利清潔服務有限公司' },
+                    schedule: [
+                        {
+                            day: 1, title: "第一天：衛生設施與高空清潔", focus: "洗手間高空清潔及高層實驗室",
+                            staffGroupA: "", staffGroupB: "", notes: "",
+                            morning: {
+                                title: "上午 (09:00 - 13:00)",
+                                tasks: [
+                                    { id: "d1-m-1", text: "全校 12 個洗手間清潔 (天花/喉管/氣窗)", completed: false, isHighLevel: true },
+                                    { id: "d1-m-2", text: "2 個更衣室清潔 (天花/喉管/氣窗)", completed: false, isHighLevel: true },
+                                    { id: "d1-m-3", text: "拆洗抽氣扇及風扇 (洗手間/更衣室)", completed: false, isHighLevel: true },
+                                ]
+                            },
+                            afternoon: {
+                                title: "下午 (14:00 - 18:00)",
+                                tasks: [
+                                    { id: "d1-a-1", text: "A組: 5/F 化學室、科學室 (含準備室)", completed: false },
+                                    { id: "d1-a-2", text: "B組: 4/F 生物室、物理室 (含準備室)", completed: false },
+                                    { id: "d1-a-3", text: "實驗室氣窗、風扇、拖地", completed: false },
+                                ]
+                            }
+                        },
+                        {
+                            day: 2, title: "第二天：高層課室與圖書館", focus: "4/F-5/F 課室及 3/F 大型特別室",
+                            staffGroupA: "", staffGroupB: "", notes: "",
+                            morning: { title: "上午 (09:00 - 13:00)", tasks: [{ id: "d2-m-1", text: "A組: 5/F 課室 (501-507，共7間)", completed: false }, { id: "d2-m-2", text: "B組: 4/F 課室 (401-406，共6間)", completed: false }, { id: "d2-m-3", text: "課室百葉簾、氣窗、風扇清潔", completed: false }] },
+                            afternoon: { title: "下午 (14:00 - 18:00)", tasks: [{ id: "d2-a-1", text: "3/F 圖書館書架除塵 (小心書籍)", completed: false }, { id: "d2-a-2", text: "3/F 地理室清潔", completed: false }, { id: "d2-a-3", text: "圖書館及地理室地板清潔", completed: false }] }
+                        },
+                        {
+                            day: 3, title: "第三天：中層課室與術科特別室", focus: "2/F-3/F 課室及家政區域",
+                            staffGroupA: "", staffGroupB: "", notes: "",
+                            morning: { title: "上午 (09:00 - 13:00)", tasks: [{ id: "d3-m-1", text: "A組: 3/F 課室 (301-306，共6間)", completed: false }, { id: "d3-m-2", text: "B組: 2/F 課室 (201-206，共6間)", completed: false }] },
+                            afternoon: { title: "下午 (14:00 - 18:00)", tasks: [{ id: "d3-a-1", text: "A組: 2/F 縫紉室 (除塵)", completed: false }, { id: "d3-a-2", text: "A組: 2/F 家政室 (去頑固污漬)", completed: false }, { id: "d3-a-3", text: "B組: 2/F 輔導室", completed: false }, { id: "d3-a-4", text: "B組: 1/F 音樂室", completed: false }] }
+                        },
+                        {
+                            day: 4, title: "第四天：低層設施與藝術/科技室", focus: "1/F 剩餘課室及 G/F 大型特別室",
+                            staffGroupA: "", staffGroupB: "", notes: "",
+                            morning: { title: "上午 (09:00 - 13:00)", tasks: [{ id: "d4-m-1", text: "A組: 1/F 視藝室", completed: false }, { id: "d4-m-2", text: "A組: 1/F 101室", completed: false }, { id: "d4-m-3", text: "B組: G/F 設計與科技室 (DT)", completed: false }, { id: "d4-m-4", text: "B組: G01室", completed: false }] },
+                            afternoon: { title: "下午 (14:00 - 18:00)", tasks: [{ id: "d4-a-1", text: "G/F 健身室 (地板消毒，避開器材)", completed: false }, { id: "d4-a-2", text: "SAC室 (玻璃窗清潔)", completed: false }] }
+                        },
+                        {
+                            day: 5, title: "第五天：行政區域與總結", focus: "教員室、校務處及總驗收",
+                            staffGroupA: "", staffGroupB: "", notes: "",
+                            morning: { title: "上午 (09:00 - 13:00)", tasks: [{ id: "d5-m-1", text: "4 間教員室清潔 (只清潔桌面空白處)", completed: false }, { id: "d5-m-2", text: "教員室地面及百葉簾", completed: false }, { id: "d5-m-3", text: "走廊及公用位置支援", completed: false }] },
+                            afternoon: { title: "下午 (14:00 - 18:00)", tasks: [{ id: "d5-a-1", text: "校務處清潔", completed: false }, { id: "d5-a-2", text: "會客室清潔", completed: false }, { id: "d5-a-3", text: "整理所有清潔工具", completed: false }, { id: "d5-a-4", text: "主管巡查總驗收 (燈盤/風扇/角落)", completed: false }, { id: "d5-a-5", text: "向校務處報備並提交證明書", completed: false }] }
+                        }
+                    ]
+                };
+
+                const projectInfo = ref(defaultData.projectInfo);
+                const schedule = ref(defaultData.schedule);
+                const isRemoteUpdate = ref(false);
+
+                // Debounce
+                const debounce = (fn, delay) => {
+                    let timeoutId;
+                    return (...args) => {
+                        clearTimeout(timeoutId);
+                        timeoutId = setTimeout(() => fn(...args), delay);
+                    };
+                };
+
+                // Load Data
+                const loadData = async () => {
+                    saveStatus.value = '連接伺服器中...';
+                    try {
+                        const res = await fetch(API_URL);
+                        if (!res.ok) throw new Error('Server not ready');
+                        
+                        const data = await res.json();
+                        
+                        isRemoteUpdate.value = true;
+                        if (data.projectInfo) projectInfo.value = data.projectInfo;
+                        if (data.schedule) schedule.value = data.schedule;
+                        
+                        saveStatus.value = '已載入資料';
+                        statusColor.value = 'text-green-600';
+                        statusIcon.value = 'fa-check-circle';
+                        appMode.value = '連線正常';
+                        
+                        nextTick(() => isRemoteUpdate.value = false);
+                    } catch (e) {
+                        console.warn("Server connection failed, using local mode:", e);
+                        saveStatus.value = '預覽模式 (伺服器未連接)';
+                        statusColor.value = 'text-orange-500';
+                        statusIcon.value = 'fa-eye';
+                        appMode.value = '離線預覽';
+                        
+                        // Fallback to default data
+                        isRemoteUpdate.value = false;
+                    }
+                };
+
+                // Save Data
+                const saveData = async () => {
+                    saveStatus.value = '儲存中...';
+                    statusColor.value = 'text-yellow-500';
+                    statusIcon.value = 'fa-spinner fa-spin';
+
+                    try {
+                        const res = await fetch(API_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                projectInfo: projectInfo.value,
+                                schedule: schedule.value
+                            })
+                        });
+                        
+                        if (!res.ok) throw new Error('Save failed');
+                        
+                        const time = new Date().toLocaleTimeString('zh-HK', {hour: '2-digit', minute:'2-digit'});
+                        saveStatus.value = `已儲存於 ${time}`;
+                        statusColor.value = 'text-green-600';
+                        statusIcon.value = 'fa-save';
+                    } catch (e) {
+                        console.warn("Save failed:", e);
+                        saveStatus.value = '儲存失敗 (伺服器未連接)';
+                        statusColor.value = 'text-red-500';
+                        statusIcon.value = 'fa-times-circle';
+                    }
+                };
+
+                const debouncedSave = debounce(saveData, 1000);
+
+                onMounted(() => {
+                    loadData();
+                });
+
+                watch([projectInfo, schedule], () => {
+                    if (!isRemoteUpdate.value) {
+                        saveStatus.value = '準備儲存...';
+                        statusColor.value = 'text-yellow-500';
+                        statusIcon.value = 'fa-pen';
+                        debouncedSave();
+                    }
+                }, { deep: true });
+
+                const resetData = async () => {
+                    if(confirm('確定要重置資料嗎？這將會覆蓋伺服器上的紀錄。')) {
+                        isRemoteUpdate.value = true;
+                        projectInfo.value = JSON.parse(JSON.stringify(defaultData.projectInfo));
+                        schedule.value = JSON.parse(JSON.stringify(defaultData.schedule));
+                        
+                        nextTick(() => {
+                            isRemoteUpdate.value = false;
+                            debouncedSave();
+                        });
+                    }
+                };
+
+                const calculateDayProgress = (dayIndex) => {
+                    const day = schedule.value[dayIndex];
+                    if (!day) return 0;
+                    const tasks = [...day.morning.tasks, ...day.afternoon.tasks];
+                    if (tasks.length === 0) return 0;
+                    const completed = tasks.filter(t => t.completed).length;
+                    return Math.round((completed / tasks.length) * 100);
+                };
+
+                const calculateTotalProgress = computed(() => {
+                    let total = 0;
+                    let completed = 0;
+                    schedule.value.forEach(day => {
+                        const tasks = [...day.morning.tasks, ...day.afternoon.tasks];
+                        total += tasks.length;
+                        completed += tasks.filter(t => t.completed).length;
+                    });
+                    if (total === 0) return 0;
+                    return Math.round((completed / total) * 100);
+                });
+
+                const printPage = () => {
+                    isPrinting.value = true;
+                    const previousTab = activeTab.value;
+                    activeTab.value = 6;
+                    setTimeout(() => {
+                        window.print();
+                        isPrinting.value = false;
+                        activeTab.value = previousTab;
+                    }, 500);
+                };
+
+                return {
+                    activeTab, schedule, projectInfo, isPrinting, saveStatus, statusColor, statusIcon, appMode,
+                    calculateDayProgress, calculateTotalProgress, printPage, resetData
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
