@@ -80,6 +80,7 @@ const defaultData = {
 
 // --- 資料庫初始化邏輯 ---
 const initDB = async () => {
+    // 如果連線字串為空，直接跳出，避免後續報錯
     if (!process.env.DATABASE_URL) return;
 
     try {
@@ -115,6 +116,7 @@ initDB();
 app.get('/api/data', async (req, res) => {
     // 檢查資料庫設定
     if (!process.env.DATABASE_URL) {
+        console.warn('⚠️ 未設定 DATABASE_URL，回傳預設資料');
         return res.json(defaultData); // Fallback: 回傳預設資料
     }
 
