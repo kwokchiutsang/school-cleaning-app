@@ -13,17 +13,28 @@ const HOST = '0.0.0.0';
 if (!process.env.DATABASE_URL) {
     console.error("❌ 嚴重錯誤：找不到 DATABASE_URL 環境變數！");
     console.error("請檢查 Railway 的 Variables 設定，確保 DATABASE_URL 存在。");
-    // 注意：若無資料庫連線字串，後續資料庫操作將會失敗
 } else {
     console.log("✅ 偵測到 DATABASE_URL，準備連線資料庫...");
 }
 
 // 🟢 建立 PostgreSQL 連線池 (嚴格模式)
-// 不做任何手動解析，直接將字串交給 pg 套件處理
+// 絕對不手動設定 host, user, password
+// 直接使用 connectionString 讀取 Railway 提供的完整網址
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
         rejectUnauthorized: false // Railway 必須要加這一行才能連線 SSL
+    }
+});
+
+// 🟢 連線測試：啟動時測試一次連線
+pool.connect((err, client, release) => {
+    if (err) {
+        console.error('❌ 資料庫連線測試失敗:', err.message);
+        console.error('請確認 DATABASE_URL 是否正確，以及資料庫是否運作中。');
+    } else {
+        console.log('✅ DB Connected! 資料庫連線成功');
+        release(); // 釋放連線回 Pool
     }
 });
 
@@ -160,3 +171,4 @@ app.post('/api/data', async (req, res) => {
 app.listen(PORT, HOST, () => {
     console.log(`伺服器正在運行: http://${HOST}:${PORT}`);
 });
+
