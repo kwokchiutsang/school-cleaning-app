@@ -8,13 +8,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
 
-// 檢查環境變數 (僅作提示用，不阻擋程式執行，以免影響 Log 查看)
+// 檢查環境變數 (除錯用)
 if (!process.env.DATABASE_URL) {
-    console.error("⚠️ 警告：未偵測到 DATABASE_URL！資料庫連線將會失敗。");
+    console.error("⚠️  嚴重錯誤：未偵測到 DATABASE_URL 環境變數！");
+    console.error("請確認 Railway 的 Variables 頁面中已正確設定 DATABASE_URL。");
 }
 
-// 🟢 建立 PostgreSQL 連線池 (修正版)
-// 直接使用 process.env.DATABASE_URL，不進行任何手動解析
+// 🟢 建立 PostgreSQL 連線池 (Railway 修正版)
+// 不手動拆解 URL，直接使用 connectionString
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
@@ -79,7 +80,6 @@ const defaultData = {
 
 // --- 資料庫初始化邏輯 ---
 const initDB = async () => {
-    // 如果連線字串為空，直接跳出，避免後續報錯
     if (!process.env.DATABASE_URL) return;
 
     try {
@@ -103,7 +103,6 @@ const initDB = async () => {
         }
     } catch (err) {
         console.error('❌ 資料庫初始化失敗:', err);
-        // 不退出 process，讓 Server 保持運行，方便查看 Log
     }
 };
 
@@ -114,9 +113,9 @@ initDB();
 
 // 取得資料
 app.get('/api/data', async (req, res) => {
+    // 檢查資料庫設定
     if (!process.env.DATABASE_URL) {
-        // 如果沒有資料庫，暫時回傳預設資料 (Fallback)
-        return res.json(defaultData);
+        return res.json(defaultData); // Fallback: 回傳預設資料
     }
 
     try {
@@ -135,7 +134,7 @@ app.get('/api/data', async (req, res) => {
 // 儲存資料
 app.post('/api/data', async (req, res) => {
     if (!process.env.DATABASE_URL) {
-        return res.status(500).json({ error: '未設定資料庫，無法儲存' });
+        return res.status(500).json({ error: '伺服器錯誤：未設定資料庫連線字串 (DATABASE_URL)' });
     }
 
     try {
