@@ -5,17 +5,21 @@ const { Pool } = require('pg');
 const app = express();
 
 // 🟢 設定 Port 與 Host (部署關鍵設定)
+// Railway 會自動注入 PORT，若無則使用 3000
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
 
-// 檢查環境變數 (除錯用)
+// 🔍 嚴格檢查環境變數
 if (!process.env.DATABASE_URL) {
-    console.error("⚠️  嚴重錯誤：未偵測到 DATABASE_URL 環境變數！");
-    console.error("請確認 Railway 的 Variables 頁面中已正確設定 DATABASE_URL。");
+    console.error("❌ 嚴重錯誤：找不到 DATABASE_URL 環境變數！");
+    console.error("請檢查 Railway 的 Variables 設定，確保 DATABASE_URL 存在。");
+    // 注意：若無資料庫連線字串，後續資料庫操作將會失敗
+} else {
+    console.log("✅ 偵測到 DATABASE_URL，準備連線資料庫...");
 }
 
-// 🟢 建立 PostgreSQL 連線池 (Railway 修正版)
-// 不手動拆解 URL，直接使用 connectionString
+// 🟢 建立 PostgreSQL 連線池 (嚴格模式)
+// 不做任何手動解析，直接將字串交給 pg 套件處理
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
@@ -80,10 +84,11 @@ const defaultData = {
 
 // --- 資料庫初始化邏輯 ---
 const initDB = async () => {
-    // 如果連線字串為空，直接跳出，避免後續報錯
+    // 若無連線字串，直接跳出避免 crash
     if (!process.env.DATABASE_URL) return;
 
     try {
+        console.log("正在檢查資料庫表格狀態...");
         // 1. 建立表格 (如果不存在)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS app_data (
@@ -114,10 +119,10 @@ initDB();
 
 // 取得資料
 app.get('/api/data', async (req, res) => {
-    // 檢查資料庫設定
+    // 雙重檢查
     if (!process.env.DATABASE_URL) {
-        console.warn('⚠️ 未設定 DATABASE_URL，回傳預設資料');
-        return res.json(defaultData); // Fallback: 回傳預設資料
+        console.warn('⚠️ API 警告：未設定 DATABASE_URL，回傳預設資料');
+        return res.json(defaultData);
     }
 
     try {
@@ -125,6 +130,7 @@ app.get('/api/data', async (req, res) => {
         if (result.rows.length > 0) {
             res.json(result.rows[0].data);
         } else {
+            // 如果資料庫有連線但沒資料 (罕見)，回傳預設值
             res.json(defaultData);
         }
     } catch (err) {
